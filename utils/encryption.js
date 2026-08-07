@@ -15,9 +15,12 @@ const TAG_LEN   = 16;
 function getKey() {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
-    if (process.env.NODE_ENV !== 'test') {
-      console.warn('[encryption] WARNING: ENCRYPTION_KEY not set — using insecure dev key. Set this in .env for production!');
+    // Fail loudly outside local dev — a silent fallback here would mean
+    // production PII gets encrypted with a key checked into git.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[encryption] ENCRYPTION_KEY is required in production — refusing to start with the insecure dev key.');
     }
+    console.warn('[encryption] WARNING: ENCRYPTION_KEY not set — using insecure dev key. Set this in .env for production!');
     return Buffer.from('aivorah-dev-key-do-not-use-in-prod-!!', 'utf8').subarray(0, 32);
   }
   return crypto.createHash('sha256').update(raw).digest();

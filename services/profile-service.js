@@ -86,20 +86,19 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
     data = existing;
   }
 
-  if (teaches && Array.isArray(teaches)) {
-    await setPreferences(email, { teaches, updatedAt: new Date().toISOString() });
-  }
-
-  if (children && Array.isArray(children)) {
-    await setPreferences(email, { children, ...(phone ? { phone: encrypt(phone) } : {}), updatedAt: new Date().toISOString() });
-  }
-
-  if (dob || gender || phone) {
-    const updates = { updatedAt: new Date().toISOString() };
-    if (dob)    updates.dob    = dob;
-    if (gender) updates.gender = gender;
-    if (phone)  updates.phone  = encrypt(phone);
-    await setPreferences(email, updates);
+  // Collapsed into one setPreferences call (was 3 separate read-merge-upsert
+  // round-trips) — teaches/children/dob/gender/phone can all arrive on the
+  // same request, so writing them together avoids the last call clobbering
+  // an in-flight merge from an earlier one.
+  const preferencesPatch = {};
+  if (teaches && Array.isArray(teaches))   preferencesPatch.teaches  = teaches;
+  if (children && Array.isArray(children)) preferencesPatch.children = children;
+  if (dob)    preferencesPatch.dob    = dob;
+  if (gender) preferencesPatch.gender = gender;
+  if (phone)  preferencesPatch.phone  = encrypt(phone);
+  if (Object.keys(preferencesPatch).length > 0) {
+    preferencesPatch.updatedAt = new Date().toISOString();
+    await setPreferences(email, preferencesPatch);
   }
 
   await syncEnrollmentAfterProfileUpdate({
