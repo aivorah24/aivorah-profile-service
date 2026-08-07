@@ -86,6 +86,12 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
     data = existing;
   }
 
+  if (!data) {
+    const err = new Error('user not found');
+    err.status = 404;
+    throw err;
+  }
+
   // Collapsed into one setPreferences call (was 3 separate read-merge-upsert
   // round-trips) — teaches/children/dob/gender/phone can all arrive on the
   // same request, so writing them together avoids the last call clobbering
