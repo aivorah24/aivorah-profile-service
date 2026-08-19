@@ -15,4 +15,10 @@ app.use('/user', profileRoute);
 app.get('/health', (req, res) => res.json({ ok: true, service: 'aivorah-profile-service' }));
 
 const PORT = process.env.PORT || 4002;
-app.listen(PORT, () => console.log(`[aivorah-profile-service] listening on port ${PORT}`));
+// Only start listening when run directly (`node index.js`) — not when
+// required by tests, so Supertest can exercise `app` in-memory.
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`[aivorah-profile-service] listening on port ${PORT}`));
+}
+
+module.exports = app;
