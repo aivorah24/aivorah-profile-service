@@ -15,4 +15,8 @@ app.use('/user', profileRoute);
 app.get('/health', (req, res) => res.json({ ok: true, service: 'aivorah-profile-service' }));
 
 const PORT = process.env.PORT || 4002;
-app.listen(PORT, () => console.log(`[aivorah-profile-service] listening on port ${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`[aivorah-profile-service] listening on port ${PORT}`));
+}
+
+module.exports = app;
