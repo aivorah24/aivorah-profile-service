@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node tests/smoke.js"
+    "test": "jest",
+    "smoke": "node tests/smoke.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.0",
@@ -16,6 +17,17 @@
     "express": "^4.19.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^6.3.4"
+  },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "tests/smoke.js"
+    ]
   }
 }
