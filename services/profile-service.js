@@ -1,7 +1,7 @@
 const cloudinary = require('cloudinary').v2;
 const supabase   = require('./supabase');
 const { encrypt, decrypt } = require('../utils/encryption');
-const { setPreferences } = require('./preferences');
+const { getPreferences, setPreferences } = require('./preferences');
 const { syncEnrollmentAfterProfileUpdate } = require('./enrollment-service');
 
 cloudinary.config({
@@ -157,4 +157,85 @@ async function uploadProfilePhoto({ userEmail, base64, mimeType = 'image/jpeg' }
   return { photoUrl };
 }
 
-module.exports = { updateProfile, uploadProfilePhoto };
+// Ported from ai-mentor/server/routes/user.js PATCH /user/preferences — same
+// user_preferences jsonb patch, same users-table write-through for the fields
+// that must survive re-login (grade/curriculum/location/phone), same shared
+// Supabase project, so this is byte-compatible with rows the monolith wrote.
+async function updatePreferences(body) {
+  const {
+    email, name, role, grade, curriculum, school, location,
+    avatarStyle, learningStyle, interests, bio, photoUrl,
+    pushNotifications, aiSuggestions, weeklyReport, assignmentAlerts, challengeUpdates,
+    autoGrading, shareProgress,
+    gender, dob, mobile, phone, mobileVerified, state, country,
+    teacherRole, experience, roles, activeRole,
+  } = body ?? {};
+
+  if (!email) {
+    const err = new Error('email required');
+    err.status = 400;
+    throw err;
+  }
+
+  const patch = {};
+  if (name != null) patch.name = String(name);
+  if (role != null) patch.role = String(role);
+  if (grade != null) patch.grade = String(grade);
+  if (curriculum != null) patch.curriculum = String(curriculum);
+  if (school != null) patch.school = String(school);
+  if (location != null) patch.location = String(location);
+  if (avatarStyle != null) patch.avatarStyle = String(avatarStyle);
+  if (learningStyle != null) patch.learningStyle = String(learningStyle);
+  if (bio != null) patch.bio = String(bio);
+  if (photoUrl != null) patch.photoUrl = String(photoUrl);
+  if (interests != null) {
+    patch.interests = Array.isArray(interests)
+      ? interests.map((x) => String(x))
+      : String(interests).split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  if (pushNotifications != null) patch.pushNotifications = Boolean(pushNotifications);
+  if (aiSuggestions != null) patch.aiSuggestions = Boolean(aiSuggestions);
+  if (weeklyReport != null) patch.weeklyReport = Boolean(weeklyReport);
+  if (assignmentAlerts != null) patch.assignmentAlerts = Boolean(assignmentAlerts);
+  if (challengeUpdates != null) patch.challengeUpdates = Boolean(challengeUpdates);
+  if (autoGrading != null) patch.autoGrading = Boolean(autoGrading);
+  if (shareProgress != null) patch.shareProgress = Boolean(shareProgress);
+  if (gender != null) patch.gender = String(gender);
+  if (dob != null) patch.dob = String(dob);
+  if (state != null) patch.state = String(state);
+  if (country != null) patch.country = String(country);
+  if (teacherRole != null) patch.teacherRole = String(teacherRole);
+  if (experience != null) patch.experience = String(experience);
+  const phoneVal = phone ?? mobile;
+  if (phoneVal != null) patch.phone = encrypt(String(phoneVal));
+  if (mobileVerified != null) patch.mobileVerified = Boolean(mobileVerified);
+  if (Array.isArray(roles) && roles.length > 0) patch.roles = roles;
+  if (activeRole != null) patch.activeRole = String(activeRole);
+
+  patch.updatedAt = new Date().toISOString();
+  await setPreferences(email, patch);
+
+  // Same write-through as updateProfile() above — keeps grade/curriculum/
+  // location/phone readable from `users` on next login without a preferences join.
+  const usersPatch = {};
+  if (grade != null) usersPatch.grade = String(grade);
+  if (curriculum != null) usersPatch.curriculum = String(curriculum);
+  if (location != null) usersPatch.location = String(location);
+  if (phoneVal != null) usersPatch.phone = encrypt(String(phoneVal));
+  if (Object.keys(usersPatch).length > 0) {
+    await supabase.from('users').update(usersPatch).eq('email', email.toLowerCase().trim());
+  }
+
+  const saved = await getPreferences(email);
+  if (saved?.phone) saved.phone = decrypt(saved.phone);
+  return saved;
+}
+
+async function fetchPreferences(email) {
+  if (!email) return null; // don't expose all records, same guard as the monolith
+  const rec = await getPreferences(email);
+  if (rec?.phone) rec.phone = decrypt(rec.phone);
+  return rec ?? null;
+}
+
+module.exports = { updateProfile, uploadProfilePhoto, updatePreferences, fetchPreferences };
