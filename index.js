@@ -6,6 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const profileRoute = require('./routes/profile');
 const parentRoute = require('./routes/parent');
+const brandingRoute = require('./routes/branding');
 
 const app = express();
 app.use(cors());
@@ -13,6 +14,7 @@ app.use(express.json({ limit: '10mb' })); // photo uploads are base64
 
 app.use('/user', profileRoute);
 app.use('/parent', parentRoute);
+app.use('/branding', brandingRoute);
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'aivorah-profile-service' }));
 
