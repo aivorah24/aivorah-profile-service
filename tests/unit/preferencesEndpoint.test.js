@@ -64,6 +64,39 @@ describe('updatePreferences', () => {
     expect(mockSb.supabase.from).not.toHaveBeenCalledWith('users');
   });
 
+  // Regression tests for the "Gender/DOB/State missing on re-login" bug
+  // (2026-08-26): gender/dob/state/country used to live ONLY in
+  // user_preferences, so a single failed/slow GET /user/preferences at login
+  // silently dropped them while grade/curriculum/location/phone (already
+  // users-table columns) never did. They now get the same write-through.
+  test('gender/dob/state/country also write through to the real users table', async () => {
+    await updatePreferences({ email: 'a@a.com', gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' });
+    expect(mockSb.supabase.from).toHaveBeenCalledWith('users');
+  });
+
+  test('gender/dob/state/country write through to users with their exact real values', async () => {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ data: null, error: null })) }));
+    const originalFrom = mockSb.supabase.from;
+    mockSb.supabase.from = jest.fn((table) => (table === 'users' ? { update: updateSpy } : originalFrom(table)));
+
+    await updatePreferences({ email: 'a@a.com', gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' })
+    );
+
+    mockSb.supabase.from = originalFrom;
+  });
+
+  test('gender/dob/state/country are still saved to preferences too (old path untouched)', async () => {
+    await updatePreferences({ email: 'a@a.com', gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' });
+
+    expect(mockSetPreferences).toHaveBeenCalledWith(
+      'a@a.com',
+      expect.objectContaining({ gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' })
+    );
+  });
+
   test('a real saved phone comes back decrypted in the response', async () => {
     mockGetPreferences.mockResolvedValue({ phone: encrypt('8888888888') });
     const saved = await updatePreferences({ email: 'a@a.com', bio: 'x' });

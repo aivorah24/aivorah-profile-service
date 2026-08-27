@@ -13,7 +13,7 @@ cloudinary.config({
 // Updates profile fields for a logged-in user (any role), then triggers
 // enrollment sync as a side effect (see enrollment-service.js).
 async function updateProfile({ email, name, role: bodyRole, curriculum, grade, school, location,
-                                dob, gender, teaches, children, phone,
+                                dob, gender, state, country, teaches, children, phone,
                                 onboardingStep, complete }) {
   if (!email) {
     const err = new Error('email required');
@@ -50,6 +50,16 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   if (location)   patch.location   = location;
   if (phone)      patch.phone      = encrypt(phone.trim());
   if (onboardingStep != null) patch.onboarding_step = onboardingStep;
+  // dob/gender/state/country: now written straight to `users` (2026-08-26) —
+  // these used to only ever reach user_preferences (see preferencesPatch
+  // below), which was the root cause of a bug where they'd silently vanish
+  // on next login if the separate /user/preferences fetch failed for any
+  // reason, while grade/curriculum/location/phone (already users-table
+  // columns) never did. See docs/root-cause or the PR description.
+  if (dob)     patch.dob     = String(dob);
+  if (gender)  patch.gender  = String(gender);
+  if (state)   patch.state   = String(state);
+  if (country) patch.country = String(country);
 
   const emailLc = email.toLowerCase().trim();
 
@@ -61,14 +71,14 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
       .from('users')
       .update(patch)
       .eq('email', emailLc)
-      .select('id, name, email, role, grade, school, curriculum, location, phone, onboarding_complete')
+      .select('id, name, email, role, grade, school, curriculum, location, phone, onboarding_complete, dob, gender, state, country')
       .single());
 
     if (error && error.code === 'PGRST116') {
       ({ data, error } = await supabase
         .from('users')
         .upsert({ email: emailLc, ...patch }, { onConflict: 'email' })
-        .select('id, name, email, role, grade, school, curriculum, location, phone, onboarding_complete')
+        .select('id, name, email, role, grade, school, curriculum, location, phone, onboarding_complete, dob, gender, state, country')
         .single());
     }
 
@@ -80,7 +90,7 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   } else {
     const { data: existing } = await supabase
       .from('users')
-      .select('id, name, email, role, grade, school, curriculum, location, phone, onboarding_complete')
+      .select('id, name, email, role, grade, school, curriculum, location, phone, onboarding_complete, dob, gender, state, country')
       .eq('email', emailLc)
       .maybeSingle();
     data = existing;
@@ -126,6 +136,10 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
     location:           data.location,
     phone:              data.phone ? decrypt(data.phone) : null,
     onboardingComplete: data.onboarding_complete,
+    dob:                data.dob     || null,
+    gender:             data.gender  || null,
+    state:              data.state   || null,
+    country:            data.country || null,
   };
 }
 
@@ -217,11 +231,20 @@ async function updatePreferences(body) {
 
   // Same write-through as updateProfile() above — keeps grade/curriculum/
   // location/phone readable from `users` on next login without a preferences join.
+  // gender/dob/state/country added 2026-08-26 for the same reason — they used
+  // to live ONLY in user_preferences, so a single failed/slow GET
+  // /user/preferences at login silently dropped them while everything else
+  // (already users-table columns) survived. Root cause of the "Gender/DOB/
+  // State missing on re-login" bug.
   const usersPatch = {};
   if (grade != null) usersPatch.grade = String(grade);
   if (curriculum != null) usersPatch.curriculum = String(curriculum);
   if (location != null) usersPatch.location = String(location);
   if (phoneVal != null) usersPatch.phone = encrypt(String(phoneVal));
+  if (gender != null) usersPatch.gender = String(gender);
+  if (dob != null) usersPatch.dob = String(dob);
+  if (state != null) usersPatch.state = String(state);
+  if (country != null) usersPatch.country = String(country);
   if (Object.keys(usersPatch).length > 0) {
     await supabase.from('users').update(usersPatch).eq('email', email.toLowerCase().trim());
   }

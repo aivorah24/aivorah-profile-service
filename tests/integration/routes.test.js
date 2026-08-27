@@ -68,6 +68,21 @@ describe('PATCH /user/profile', () => {
 
     expect(mockUpdateProfile).toHaveBeenCalledWith({});
   });
+
+  // Regression test for the "Gender/DOB/State missing on re-login" bug
+  // (2026-08-26) — dob/gender/state/country now round-trip through this
+  // route the same as any other profile field.
+  test('a real dob/gender/state/country round-trip through this route to the service and back', async () => {
+    mockUpdateProfile.mockResolvedValue({ id: 'u1', email: 'a@a.com', dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
+
+    const res = await request(app).patch('/user/profile').send({ email: 'a@a.com', dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
+    expect(mockUpdateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'a@a.com', dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' })
+    );
+  });
 });
 
 describe('POST /user/upload-photo', () => {

@@ -93,6 +93,70 @@ describe('updateProfile — patch building', () => {
   });
 });
 
+describe('updateProfile — dob/gender/state/country write through to users', () => {
+  // Regression tests for the "Gender/DOB/State missing on re-login" bug
+  // (2026-08-26): these 4 fields used to only ever be forwarded into
+  // user_preferences (see preferencesPatch below), never into the `users`
+  // row this function updates — so a single failed/slow GET
+  // /user/preferences at login silently dropped them while grade/school/
+  // curriculum (already `users` columns, updated right here) never did.
+  test('a real dob/gender/state/country are written straight into the users row', async () => {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow({ dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' }), error: null })) })) })) }));
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') return { update: updateSpy };
+      return originalFrom(table);
+    });
+
+    await updateProfile({ email: 'a@a.com', dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' })
+    );
+  });
+
+  test('a real saved dob/gender/state/country come back in the response', async () => {
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') {
+        return { update: jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow({ dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' }), error: null })) })) })) })) };
+      }
+      return originalFrom(table);
+    });
+
+    const result = await updateProfile({ email: 'a@a.com', dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
+
+    expect(result).toMatchObject({ dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
+  });
+
+  test('dob/gender still also reach preferences too (old path untouched, not yet removed)', async () => {
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') {
+        return { update: jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow(), error: null })) })) })) })) };
+      }
+      return originalFrom(table);
+    });
+
+    await updateProfile({ email: 'a@a.com', dob: '15/06/2012', gender: 'Female' });
+
+    expect(mockSetPreferences).toHaveBeenCalledWith('a@a.com', expect.objectContaining({ dob: '15/06/2012', gender: 'Female' }));
+  });
+
+  test('no dob/gender/state/country provided leaves the users row and response untouched', async () => {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow({ name: 'New Name' }), error: null })) })) })) }));
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') return { update: updateSpy };
+      return originalFrom(table);
+    });
+
+    const result = await updateProfile({ email: 'a@a.com', name: 'New Name' });
+
+    expect(updateSpy).toHaveBeenCalledWith({ name: 'New Name' });
+    expect(result.dob).toBeNull();
+    expect(result.gender).toBeNull();
+    expect(result.state).toBeNull();
+    expect(result.country).toBeNull();
+  });
+});
+
 describe('updateProfile — onboarding completion', () => {
   test('a real student completing onboarding without grade/curriculum is rejected', async () => {
     mockSb.supabase.from = jest.fn((table) => {
