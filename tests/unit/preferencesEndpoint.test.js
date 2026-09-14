@@ -102,6 +102,24 @@ describe('updatePreferences', () => {
     const saved = await updatePreferences({ email: 'a@a.com', bio: 'x' });
     expect(saved.phone).toBe('8888888888');
   });
+
+  // Regression test: SetPasswordScreen.tsx clears mustChangePassword via
+  // THIS endpoint (not the monolith's /user/clear-must-change-password,
+  // which writes to a different Supabase project than /user/sync reads
+  // from - see that screen's fetch call for the full bug).
+  test('mustChangePassword:false is saved to preferences', async () => {
+    await updatePreferences({ email: 'a@a.com', mustChangePassword: false });
+    expect(mockSetPreferences).toHaveBeenCalledWith(
+      'a@a.com',
+      expect.objectContaining({ mustChangePassword: false }),
+    );
+  });
+
+  test('omitting mustChangePassword entirely leaves it untouched (not force-set to false)', async () => {
+    await updatePreferences({ email: 'a@a.com', bio: 'just a bio' });
+    const savedPatch = mockSetPreferences.mock.calls[0][1];
+    expect(savedPatch).not.toHaveProperty('mustChangePassword');
+  });
 });
 
 describe('fetchPreferences', () => {

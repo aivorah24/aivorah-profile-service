@@ -182,7 +182,7 @@ async function updatePreferences(body) {
     pushNotifications, aiSuggestions, weeklyReport, assignmentAlerts, challengeUpdates,
     autoGrading, shareProgress,
     gender, dob, mobile, phone, mobileVerified, state, country,
-    teacherRole, experience, roles, activeRole,
+    teacherRole, experience, roles, activeRole, mustChangePassword,
   } = body ?? {};
 
   if (!email) {
@@ -225,6 +225,14 @@ async function updatePreferences(body) {
   if (mobileVerified != null) patch.mobileVerified = Boolean(mobileVerified);
   if (Array.isArray(roles) && roles.length > 0) patch.roles = roles;
   if (activeRole != null) patch.activeRole = String(activeRole);
+  // Ported so SetPasswordScreen.tsx can clear this flag via THIS service
+  // instead of the monolith's now-unreachable-in-practice
+  // /user/clear-must-change-password (see that screen's fetch call for the
+  // full bug - the monolith writes to a different Supabase project than
+  // this service, so that call never actually cleared the flag anywhere
+  // /user/sync reads from, sending the student back to Set Password on
+  // every subsequent fresh login even after they'd already set one).
+  if (mustChangePassword != null) patch.mustChangePassword = Boolean(mustChangePassword);
 
   patch.updatedAt = new Date().toISOString();
   await setPreferences(email, patch);
