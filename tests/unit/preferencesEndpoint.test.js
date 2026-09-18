@@ -81,8 +81,10 @@ describe('updatePreferences', () => {
 
     await updatePreferences({ email: 'a@a.com', gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' });
 
+    // dob is converted DD/MM/YYYY -> ISO before hitting `users.dob` (a real
+    // Postgres `date` column) — see ddmmyyyyToIso's doc comment.
     expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ gender: 'Female', dob: '15/06/2012', state: 'Karnataka', country: 'India' })
+      expect.objectContaining({ gender: 'Female', dob: '2012-06-15', state: 'Karnataka', country: 'India' })
     );
 
     mockSb.supabase.from = originalFrom;

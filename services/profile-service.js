@@ -10,6 +10,30 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// The frontend has always sent/displayed dob as "DD/MM/YYYY", but `users.dob`
+// is a real Postgres `date` column, which defaults to month-first parsing —
+// any day > 12 fails with "date/time field value out of range", and day <= 12
+// silently stores day/month swapped. user_preferences.dob (jsonb) has no such
+// column type, so it's left in DD/MM/YYYY untouched; only the `users` table
+// write/read needs converting. Passes through unrecognized formats unchanged.
+function ddmmyyyyToIso(str) {
+  if (!str) return str;
+  const parts = String(str).split('/');
+  if (parts.length === 3) {
+    const [dd, mm, yyyy] = parts;
+    if (dd && mm && yyyy && yyyy.length === 4) {
+      return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    }
+  }
+  return str;
+}
+
+function isoToDdmmyyyy(str) {
+  if (!str) return str;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(str));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
+}
+
 // Updates profile fields for a logged-in user (any role), then triggers
 // enrollment sync as a side effect (see enrollment-service.js).
 async function updateProfile({ email, name, role: bodyRole, curriculum, grade, school, location,
@@ -56,7 +80,7 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   // on next login if the separate /user/preferences fetch failed for any
   // reason, while grade/curriculum/location/phone (already users-table
   // columns) never did. See docs/root-cause or the PR description.
-  if (dob)     patch.dob     = String(dob);
+  if (dob)     patch.dob     = ddmmyyyyToIso(String(dob));
   if (gender)  patch.gender  = String(gender);
   if (state)   patch.state   = String(state);
   if (country) patch.country = String(country);
@@ -136,7 +160,7 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
     location:           data.location,
     phone:              data.phone ? decrypt(data.phone) : null,
     onboardingComplete: data.onboarding_complete,
-    dob:                data.dob     || null,
+    dob:                isoToDdmmyyyy(data.dob) || null,
     gender:             data.gender  || null,
     state:              data.state   || null,
     country:            data.country || null,
@@ -250,7 +274,7 @@ async function updatePreferences(body) {
   if (location != null) usersPatch.location = String(location);
   if (phoneVal != null) usersPatch.phone = encrypt(String(phoneVal));
   if (gender != null) usersPatch.gender = String(gender);
-  if (dob != null) usersPatch.dob = String(dob);
+  if (dob != null) usersPatch.dob = ddmmyyyyToIso(String(dob));
   if (state != null) usersPatch.state = String(state);
   if (country != null) usersPatch.country = String(country);
   if (Object.keys(usersPatch).length > 0) {
