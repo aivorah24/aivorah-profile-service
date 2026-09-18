@@ -109,8 +109,10 @@ describe('updateProfile — dob/gender/state/country write through to users', ()
 
     await updateProfile({ email: 'a@a.com', dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' });
 
+    // dob is converted DD/MM/YYYY -> ISO before hitting `users.dob` (a real
+    // Postgres `date` column) — see ddmmyyyyToIso's doc comment.
     expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ dob: '15/06/2012', gender: 'Female', state: 'Karnataka', country: 'India' })
+      expect.objectContaining({ dob: '2012-06-15', gender: 'Female', state: 'Karnataka', country: 'India' })
     );
   });
 
