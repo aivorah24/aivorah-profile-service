@@ -38,7 +38,7 @@ function isoToDdmmyyyy(str) {
 // enrollment sync as a side effect (see enrollment-service.js).
 async function updateProfile({ email, name, role: bodyRole, curriculum, grade, school, location,
                                 dob, gender, state, country, teaches, children, phone,
-                                onboardingStep, complete }) {
+                                onboardingStep, complete, avatarStyle, learningStyle }) {
   if (!email) {
     const err = new Error('email required');
     err.status = 400;
@@ -136,6 +136,8 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   if (dob)    preferencesPatch.dob    = dob;
   if (gender) preferencesPatch.gender = gender;
   if (phone)  preferencesPatch.phone  = encrypt(phone);
+  if (avatarStyle)   preferencesPatch.avatarStyle   = String(avatarStyle);
+  if (learningStyle) preferencesPatch.learningStyle = String(learningStyle);
   if (Object.keys(preferencesPatch).length > 0) {
     preferencesPatch.updatedAt = new Date().toISOString();
     await setPreferences(email, preferencesPatch);
