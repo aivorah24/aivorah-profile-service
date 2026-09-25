@@ -227,14 +227,7 @@ async function updatePreferences(body) {
   if (avatarStyle != null) patch.avatarStyle = String(avatarStyle);
   if (learningStyle != null) patch.learningStyle = String(learningStyle);
   if (bio != null) patch.bio = String(bio);
-  // `photoUrl: null` (as opposed to the key being absent) is the frontend's
-  // explicit "clear the uploaded photo, I picked a built-in avatar instead"
-  // signal (see useProfile.ts's handleSelectAvatar). Must be distinguished
-  // from "field not provided" — `!= null` alone can't tell them apart, and
-  // collapsing them here was Bug #9's second finding: there was no path
-  // anywhere that could ever null out users.photo_url once a real photo had
-  // been uploaded, so the header/sidebar avatar kept showing the stale photo
-  // forever after a refresh.
+  // Explicit `photoUrl: null` = clear the photo (built-in avatar picked); an absent key leaves it untouched.
   const hasPhotoUrl = Object.prototype.hasOwnProperty.call(body ?? {}, 'photoUrl');
   if (hasPhotoUrl) patch.photoUrl = photoUrl != null ? String(photoUrl) : null;
   if (interests != null) {
