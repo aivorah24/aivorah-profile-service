@@ -15,7 +15,8 @@ async function setPreferences(email, updates) {
     const key = email.toLowerCase().trim();
     const { data: existing } = await supabase.from('user_preferences').select('data').eq('user_email', key).maybeSingle();
     const merged = { ...(existing?.data ?? {}), ...updates };
-    await supabase.from('user_preferences').upsert({ user_email: key, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'user_email' });
+    const { error } = await supabase.from('user_preferences').upsert({ user_email: key, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'user_email' });
+    if (error) console.error('[setPreferences] upsert failed:', error.message);
   } catch (err) { console.error('[setPreferences]', err?.message); }
 }
 

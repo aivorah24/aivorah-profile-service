@@ -56,6 +56,18 @@ describe('updateProfile — patch building', () => {
     expect(updateSpy).toHaveBeenCalledWith({ name: 'New Name' });
   });
 
+  test('avatarStyle and learningStyle from a partial "Save & Back to Home" are persisted to preferences', async () => {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow(), error: null })) })) })) }));
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') return { update: updateSpy };
+      return originalFrom(table);
+    });
+
+    await updateProfile({ email: 'a@a.com', name: 'X', avatarStyle: 'gamer', learningStyle: 'visual' });
+
+    expect(mockSetPreferences).toHaveBeenCalledWith('a@a.com', expect.objectContaining({ avatarStyle: 'gamer', learningStyle: 'visual' }));
+  });
+
   test('a real name is trimmed before being saved', async () => {
     const updateSpy = jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow(), error: null })) })) })) }));
     mockSb.supabase.from = jest.fn((table) => {
