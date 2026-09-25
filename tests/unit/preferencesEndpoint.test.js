@@ -105,6 +105,34 @@ describe('updatePreferences', () => {
     expect(saved.phone).toBe('8888888888');
   });
 
+  // Regression test for Bug #9 (second finding, 2026-08-28): switching from an
+  // uploaded photo to a built-in avatar left the header/sidebar showing the
+  // stale photo forever after a refresh. Root cause: `if (photoUrl != null)`
+  // treated an explicit `photoUrl: null` (the frontend's "clear it" signal)
+  // identically to "field not provided at all" — so there was NO path,
+  // anywhere, that could ever null out the authoritative `users.photo_url`
+  // column once a real photo had been uploaded.
+  test('an explicit photoUrl: null clears the stored preference AND write-throughs the clear to users.photo_url', async () => {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ data: null, error: null })) }));
+    const originalFrom = mockSb.supabase.from;
+    mockSb.supabase.from = jest.fn((table) => (table === 'users' ? { update: updateSpy } : originalFrom(table)));
+
+    await updatePreferences({ email: 'a@a.com', avatarStyle: 'champion', photoUrl: null });
+
+    expect(mockSetPreferences).toHaveBeenCalledWith(
+      'a@a.com',
+      expect.objectContaining({ avatarStyle: 'champion', photoUrl: null })
+    );
+    expect(updateSpy).toHaveBeenCalledWith(expect.objectContaining({ photo_url: null }));
+
+    mockSb.supabase.from = originalFrom;
+  });
+
+  test('omitting photoUrl entirely (not selecting a new avatar) leaves users.photo_url untouched', async () => {
+    await updatePreferences({ email: 'a@a.com', bio: 'just a bio' });
+    expect(mockSb.supabase.from).not.toHaveBeenCalledWith('users');
+  });
+
   // Regression test: SetPasswordScreen.tsx clears mustChangePassword via
   // THIS endpoint (not the monolith's /user/clear-must-change-password,
   // which writes to a different Supabase project than /user/sync reads

@@ -227,7 +227,9 @@ async function updatePreferences(body) {
   if (avatarStyle != null) patch.avatarStyle = String(avatarStyle);
   if (learningStyle != null) patch.learningStyle = String(learningStyle);
   if (bio != null) patch.bio = String(bio);
-  if (photoUrl != null) patch.photoUrl = String(photoUrl);
+  // Explicit `photoUrl: null` = clear the photo (built-in avatar picked); an absent key leaves it untouched.
+  const hasPhotoUrl = Object.prototype.hasOwnProperty.call(body ?? {}, 'photoUrl');
+  if (hasPhotoUrl) patch.photoUrl = photoUrl != null ? String(photoUrl) : null;
   if (interests != null) {
     patch.interests = Array.isArray(interests)
       ? interests.map((x) => String(x))
@@ -279,6 +281,7 @@ async function updatePreferences(body) {
   if (dob != null) usersPatch.dob = ddmmyyyyToIso(String(dob));
   if (state != null) usersPatch.state = String(state);
   if (country != null) usersPatch.country = String(country);
+  if (hasPhotoUrl) usersPatch.photo_url = photoUrl != null ? String(photoUrl) : null;
   if (Object.keys(usersPatch).length > 0) {
     await supabase.from('users').update(usersPatch).eq('email', email.toLowerCase().trim());
   }
