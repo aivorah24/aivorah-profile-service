@@ -105,6 +105,19 @@ describe('updateProfile — patch building', () => {
   });
 });
 
+describe('updateProfile — NCERT is stored as CBSE', () => {
+  test('curriculum and teaches[] NCERT are written as CBSE; legacy row reads back CBSE', async () => {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow({ curriculum: 'NCERT' }), error: null })) })) })) }));
+    mockSb.supabase.from = jest.fn((table) => (table === 'users' ? { update: updateSpy } : originalFrom(table)));
+
+    const out = await updateProfile({ email: 'a@a.com', curriculum: 'ncert', teaches: [{ grade: 'Grade 8', curriculum: 'NCERT' }] });
+
+    expect(updateSpy).toHaveBeenCalledWith({ curriculum: 'CBSE' });
+    expect(mockSetPreferences).toHaveBeenCalledWith('a@a.com', expect.objectContaining({ teaches: [{ grade: 'Grade 8', curriculum: 'CBSE' }] }));
+    expect(out.curriculum).toBe('CBSE');
+  });
+});
+
 describe('updateProfile — dob/gender/state/country write through to users', () => {
   // Regression tests for the "Gender/DOB/State missing on re-login" bug
   // (2026-08-26): these 4 fields used to only ever be forwarded into

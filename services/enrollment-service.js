@@ -1,5 +1,6 @@
 const supabase = require('./supabase');
 const { readPreferences } = require('./preferences');
+const { normalizeCurriculum, curriculumAliases } = require('../utils/curriculum');
 
 // ── Auto-link teacher ↔ students by curriculum + grade ────────────────
 // Matches on both curriculum AND grade so a Grade-3 student is only linked
@@ -10,13 +11,13 @@ async function syncStudentEnrollment({ userId, curriculum, grade }) {
     .from('users')
     .select('id, email')
     .eq('role', 'teacher')
-    .eq('curriculum', curriculum);
+    .in('curriculum', curriculumAliases(curriculum));
 
   const allPrefs = (allTeachers && allTeachers.length > 0) ? await readPreferences() : {};
   const matchingTeachers = (allTeachers ?? []).filter(t => {
     const tp = allPrefs[t.email] ?? {};
     if (Array.isArray(tp.teaches) && tp.teaches.length > 0) {
-      return tp.teaches.some(tg => tg.curriculum === curriculum && tg.grade === grade);
+      return tp.teaches.some(tg => normalizeCurriculum(tg.curriculum) === normalizeCurriculum(curriculum) && tg.grade === grade);
     }
     return false;
   });
@@ -44,7 +45,7 @@ async function syncTeacherEnrollment({ userId, curriculum, grade, teaches }) {
 
   const matchingStudents = (allStudents ?? []).filter(s =>
     s.curriculum && s.grade &&
-    teacherGrades.some(tg => tg.curriculum === s.curriculum && tg.grade === s.grade)
+    teacherGrades.some(tg => normalizeCurriculum(tg.curriculum) === normalizeCurriculum(s.curriculum) && tg.grade === s.grade)
   );
 
   if (matchingStudents.length === 0) return;

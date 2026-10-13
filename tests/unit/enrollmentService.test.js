@@ -22,7 +22,7 @@ describe('syncStudentEnrollment', () => {
     const deleteChain = { eq: jest.fn(() => deleteChain), not: jest.fn(() => Promise.resolve({ data: {}, error: null })) };
     mockSb.supabase.from = jest.fn((table) => {
       if (table === 'users') {
-        return { select: jest.fn(() => ({ eq: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({
+        return { select: jest.fn(() => ({ eq: jest.fn(() => ({ in: jest.fn(() => Promise.resolve({
           data: [{ id: 't1', email: 'teacher1@a.com' }, { id: 't2', email: 'teacher2@a.com' }],
         })) })) })) };
       }
@@ -47,13 +47,34 @@ describe('syncStudentEnrollment', () => {
   test('does nothing (no upsert) when no real teacher matches', async () => {
     mockSb.supabase.from = jest.fn((table) => {
       if (table === 'users') {
-        return { select: jest.fn(() => ({ eq: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ data: [] })) })) })) };
+        return { select: jest.fn(() => ({ eq: jest.fn(() => ({ in: jest.fn(() => Promise.resolve({ data: [] })) })) })) };
       }
       return { upsert: jest.fn(), delete: jest.fn() };
     });
 
     await expect(syncStudentEnrollment({ userId: 's1', curriculum: 'IB PYP', grade: 'Grade 4' })).resolves.toBeUndefined();
     expect(mockReadPreferences).not.toHaveBeenCalled(); // short-circuits before reading prefs when there are zero teachers
+  });
+});
+
+describe('syncStudentEnrollment — legacy NCERT', () => {
+  test('a CBSE student matches teachers still stored as NCERT', async () => {
+    const upsertSpy = jest.fn(() => Promise.resolve({ data: {}, error: null }));
+    const deleteChain = { eq: jest.fn(() => deleteChain), not: jest.fn(() => Promise.resolve({ data: {}, error: null })) };
+    const inSpy = jest.fn(() => Promise.resolve({ data: [{ id: 't1', email: 'teacher1@a.com' }] }));
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') return { select: jest.fn(() => ({ eq: jest.fn(() => ({ in: inSpy })) })) };
+      return { delete: jest.fn(() => deleteChain), upsert: upsertSpy };
+    });
+    mockReadPreferences.mockResolvedValue({ 'teacher1@a.com': { teaches: [{ curriculum: 'NCERT', grade: 'Grade 8' }] } });
+
+    await syncStudentEnrollment({ userId: 's1', curriculum: 'CBSE', grade: 'Grade 8' });
+
+    expect(inSpy).toHaveBeenCalledWith('curriculum', ['CBSE', 'NCERT']);
+    expect(upsertSpy).toHaveBeenCalledWith(
+      [{ teacher_id: 't1', student_id: 's1', subject: 'CBSE' }],
+      { onConflict: 'teacher_id,student_id', ignoreDuplicates: true }
+    );
   });
 });
 

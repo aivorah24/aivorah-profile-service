@@ -54,6 +54,19 @@ describe('updatePreferences', () => {
     expect(savedPatch.phone.split(':').length).toBe(3);
   });
 
+  test('a legacy "NCERT" curriculum is saved as CBSE', async () => {
+    await updatePreferences({ email: 'a@a.com', curriculum: 'NCERT' });
+    expect(mockSetPreferences).toHaveBeenCalledWith('a@a.com', expect.objectContaining({ curriculum: 'CBSE' }));
+  });
+
+  test('fetchPreferences returns CBSE for a legacy NCERT blob (incl. teaches/children)', async () => {
+    mockGetPreferences.mockResolvedValue({ curriculum: 'ncert', teaches: [{ grade: 'Grade 8', curriculum: 'NCERT' }], children: [{ name: 'A', curriculum: 'NCERT' }] });
+    const rec = await fetchPreferences('a@a.com');
+    expect(rec.curriculum).toBe('CBSE');
+    expect(rec.teaches[0].curriculum).toBe('CBSE');
+    expect(rec.children[0].curriculum).toBe('CBSE');
+  });
+
   test('grade/curriculum/location/phone also write through to the real users table', async () => {
     await updatePreferences({ email: 'a@a.com', grade: 'Grade 5', curriculum: 'IB PYP', location: 'Chennai' });
     expect(mockSb.supabase.from).toHaveBeenCalledWith('users');
