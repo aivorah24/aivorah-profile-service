@@ -3,6 +3,7 @@ const supabase   = require('./supabase');
 const { encrypt, decrypt } = require('../utils/encryption');
 const { getPreferences, setPreferences } = require('./preferences');
 const { syncEnrollmentAfterProfileUpdate } = require('./enrollment-service');
+const { normalizeCurriculum, normalizeCurriculumEntries } = require('../utils/curriculum');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -44,6 +45,9 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
     err.status = 400;
     throw err;
   }
+  curriculum = normalizeCurriculum(curriculum);
+  teaches = normalizeCurriculumEntries(teaches);
+  children = normalizeCurriculumEntries(children);
 
   let currentRole = bodyRole || null;
   if (!currentRole) {
@@ -57,7 +61,7 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   const patch = {};
   if (name)       patch.name       = name.trim();
   if (bodyRole)   patch.role       = bodyRole;
-  if (curriculum) patch.curriculum = curriculum.trim();
+  if (curriculum) patch.curriculum = curriculum;
   if (grade)      patch.grade      = grade.trim();
 
   if (complete === true) {
@@ -146,7 +150,7 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   await syncEnrollmentAfterProfileUpdate({
     role: data.role,
     userId: data.id,
-    curriculum: data.curriculum,
+    curriculum: normalizeCurriculum(data.curriculum),
     grade: data.grade,
     teaches,
   });
@@ -158,7 +162,7 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
     role:               data.role,
     grade:              data.grade,
     school:             data.school,
-    curriculum:         data.curriculum,
+    curriculum:         normalizeCurriculum(data.curriculum),
     location:           data.location,
     phone:              data.phone ? decrypt(data.phone) : null,
     onboardingComplete: data.onboarding_complete,
@@ -221,7 +225,7 @@ async function updatePreferences(body) {
   if (name != null) patch.name = String(name);
   if (role != null) patch.role = String(role);
   if (grade != null) patch.grade = String(grade);
-  if (curriculum != null) patch.curriculum = String(curriculum);
+  if (curriculum != null) patch.curriculum = normalizeCurriculum(curriculum);
   if (school != null) patch.school = String(school);
   if (location != null) patch.location = String(location);
   if (avatarStyle != null) patch.avatarStyle = String(avatarStyle);
@@ -274,7 +278,7 @@ async function updatePreferences(body) {
   // State missing on re-login" bug.
   const usersPatch = {};
   if (grade != null) usersPatch.grade = String(grade);
-  if (curriculum != null) usersPatch.curriculum = String(curriculum);
+  if (curriculum != null) usersPatch.curriculum = normalizeCurriculum(curriculum);
   if (location != null) usersPatch.location = String(location);
   if (phoneVal != null) usersPatch.phone = encrypt(String(phoneVal));
   if (gender != null) usersPatch.gender = String(gender);
@@ -288,14 +292,23 @@ async function updatePreferences(body) {
 
   const saved = await getPreferences(email);
   if (saved?.phone) saved.phone = decrypt(saved.phone);
-  return saved;
+  return normalizePrefsCurricula(saved);
+}
+
+// Legacy preference blobs can still say "NCERT" — never hand that back to the app.
+function normalizePrefsCurricula(rec) {
+  if (!rec) return rec;
+  if (rec.curriculum != null) rec.curriculum = normalizeCurriculum(rec.curriculum);
+  if (rec.teaches) rec.teaches = normalizeCurriculumEntries(rec.teaches);
+  if (rec.children) rec.children = normalizeCurriculumEntries(rec.children);
+  return rec;
 }
 
 async function fetchPreferences(email) {
   if (!email) return null; // don't expose all records, same guard as the monolith
   const rec = await getPreferences(email);
   if (rec?.phone) rec.phone = decrypt(rec.phone);
-  return rec ?? null;
+  return normalizePrefsCurricula(rec) ?? null;
 }
 
 module.exports = { updateProfile, uploadProfilePhoto, updatePreferences, fetchPreferences };

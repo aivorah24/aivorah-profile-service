@@ -12,6 +12,7 @@ const router = express.Router();
 const { randomInt } = require('crypto');
 const supabase = require('../services/supabase');
 const { sendCredentialsEmail } = require('../services/mailer');
+const { normalizeCurriculum } = require('../utils/curriculum');
 
 function toTitleCase(str) {
   return String(str || '').replace(/\b\w/g, c => c.toUpperCase());
@@ -112,7 +113,7 @@ router.post('/:parentEmail/children/create-student', async (req, res) => {
       email: cleanEmail,
       role: 'student',
       grade,
-      curriculum,
+      curriculum: normalizeCurriculum(curriculum),
       school: String(school).trim(),
       onboarding_complete: true,
       created_at: new Date().toISOString(),

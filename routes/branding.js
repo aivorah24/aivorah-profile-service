@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const cloudinary = require('cloudinary').v2;
 const supabase = require('../services/supabase');
+const { normalizeCurriculum } = require('../utils/curriculum');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -18,7 +19,8 @@ cloudinary.config({
 // ── POST /branding/logo — Body: { kind, name, base64, mimeType } ───────────
 router.post('/logo', async (req, res) => {
   try {
-    const { kind, name, base64, mimeType = 'image/png' } = req.body || {};
+    const { kind, name: rawName, base64, mimeType = 'image/png' } = req.body || {};
+    const name = kind === 'curriculum' ? normalizeCurriculum(rawName) : rawName;
     if (kind !== 'school' && kind !== 'curriculum') return res.status(400).json({ error: 'kind must be "school" or "curriculum"' });
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!base64) return res.status(400).json({ error: 'base64 image required' });
@@ -47,7 +49,7 @@ router.post('/logo', async (req, res) => {
 router.get('/logos', async (req, res) => {
   try {
     const school = String(req.query.school || '').trim();
-    const curriculum = String(req.query.curriculum || '').trim();
+    const curriculum = normalizeCurriculum(String(req.query.curriculum || ''));
 
     const names = [];
     if (school) names.push({ kind: 'school', name: school });
