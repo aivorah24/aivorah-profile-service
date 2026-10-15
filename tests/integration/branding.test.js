@@ -10,12 +10,14 @@ jest.mock('cloudinary', () => ({
 
 const mockUpsert = jest.fn();
 const mockLogosSelectIn = jest.fn();
+const mockDeleteIn = jest.fn();
 jest.mock('../../services/supabase', () => ({
   from: jest.fn((table) => {
     if (table === 'branding_logos') {
       return {
         upsert: (...args) => mockUpsert(...args),
         select: () => ({ in: (...args) => mockLogosSelectIn(...args) }),
+        delete: () => ({ eq: () => ({ in: (...args) => mockDeleteIn(...args) }) }),
       };
     }
     return {};
@@ -29,6 +31,27 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUpsert.mockResolvedValue({ error: null });
   mockLogosSelectIn.mockResolvedValue({ data: [] });
+  mockDeleteIn.mockResolvedValue({ error: null });
+});
+
+describe('branding logos — duplicate name variants', () => {
+  test('upload trims the name and deletes case/whitespace variants', async () => {
+    mockCloudinaryUpload.mockResolvedValue({ secure_url: 'https://cdn/new.png' });
+    mockLogosSelectIn.mockResolvedValue({ data: [{ kind: 'school', name: 'vethathiri ' }, { kind: 'school', name: 'Vethathiri' }, { kind: 'school', name: 'Other' }] });
+    const res = await request(app).post('/branding/logo').send({ kind: 'school', name: 'Vethathiri ', base64: 'abc' });
+    expect(res.status).toBe(200);
+    expect(mockDeleteIn).toHaveBeenCalledWith('name', ['vethathiri ']);
+    expect(mockUpsert.mock.calls[0][0]).toMatchObject({ kind: 'school', name: 'Vethathiri', logo_url: 'https://cdn/new.png' });
+  });
+
+  test('lookup returns the newest of duplicate variants', async () => {
+    mockLogosSelectIn.mockResolvedValue({ data: [
+      { kind: 'school', name: 'Vethathiri', logo_url: 'https://cdn/old.png', updated_at: '2026-09-16T00:00:00Z' },
+      { kind: 'school', name: 'Vethathiri ', logo_url: 'https://cdn/new.png', updated_at: '2026-10-15T00:00:00Z' },
+    ] });
+    const res = await request(app).get('/branding/logos?school=Vethathiri');
+    expect(res.body.schoolLogoUrl).toBe('https://cdn/new.png');
+  });
 });
 
 describe('POST /branding/logo', () => {
