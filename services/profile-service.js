@@ -37,6 +37,8 @@ function isoToDdmmyyyy(str) {
 
 // Updates profile fields for a logged-in user (any role), then triggers
 // enrollment sync as a side effect (see enrollment-service.js).
+const { curriculumGradeError } = require('../utils/curriculumGrades');
+
 async function updateProfile({ email, name, role: bodyRole, curriculum, grade, school, location,
                                 dob, gender, state, country, teaches, children, phone,
                                 onboardingStep, complete, avatarStyle, learningStyle }) {
@@ -50,12 +52,24 @@ async function updateProfile({ email, name, role: bodyRole, curriculum, grade, s
   children = normalizeCurriculumEntries(children);
 
   let currentRole = bodyRole || null;
-  if (!currentRole) {
+  let existingRow = null;
+  if (!currentRole || ((grade || curriculum) && !(grade && curriculum))) {
     try {
       const { data: existing } = await supabase
-        .from('users').select('role').eq('email', email.toLowerCase().trim()).maybeSingle();
-      currentRole = existing?.role ?? null;
+        .from('users').select('role, grade, curriculum').eq('email', email.toLowerCase().trim()).maybeSingle();
+      existingRow = existing || null;
+      currentRole = currentRole || existing?.role || null;
     } catch (_) {}
+  }
+
+  // A student's curriculum and grade must fit together (IB DP is Grade 11–12 only, …).
+  if ((grade || curriculum) && currentRole !== 'teacher' && currentRole !== 'parent') {
+    const gradeError = curriculumGradeError(curriculum || existingRow?.curriculum, grade || existingRow?.grade);
+    if (gradeError) {
+      const err = new Error(gradeError);
+      err.status = 400;
+      throw err;
+    }
   }
 
   const patch = {};

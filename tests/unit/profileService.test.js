@@ -349,3 +349,38 @@ describe('uploadProfilePhoto', () => {
     expect(updateSpy).toHaveBeenCalledWith({ photo_url: 'https://cloudinary/a.png' });
   });
 });
+
+describe('updateProfile — IB curriculum/grade ranges', () => {
+  function withExisting(row) {
+    const updateSpy = jest.fn(() => ({ eq: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: usersRow(row), error: null })) })) })) }));
+    mockSb.supabase.from = jest.fn((table) => {
+      if (table === 'users') {
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: row, error: null }) }) }),
+          update: updateSpy,
+        };
+      }
+      return originalFrom(table);
+    });
+    return updateSpy;
+  }
+
+  test('an IB DP student changing to Grade 7 is rejected with the reason', async () => {
+    const updateSpy = withExisting({ role: 'student', grade: 'Grade 11', curriculum: 'IB DP' });
+    await expect(updateProfile({ email: 'a@a.com', grade: 'Grade 7' }))
+      .rejects.toMatchObject({ status: 400, message: 'IB DP is only for Grade 11–12. Please choose Grade 11 or 12, or switch to IB MYP for Grade 7.' });
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  test('curriculum and grade changed together in one valid save is accepted', async () => {
+    const updateSpy = withExisting({ role: 'student', grade: 'Grade 7', curriculum: 'IB MYP' });
+    await updateProfile({ email: 'a@a.com', curriculum: 'IB DP', grade: 'Grade 11' });
+    expect(updateSpy).toHaveBeenCalledWith(expect.objectContaining({ curriculum: 'IB DP', grade: 'Grade 11' }));
+  });
+
+  test('a teacher is not limited by IB ranges', async () => {
+    const updateSpy = withExisting({ role: 'teacher', grade: 'Grade 3', curriculum: 'IB DP' });
+    await updateProfile({ email: 'a@a.com', grade: 'Grade 3' });
+    expect(updateSpy).toHaveBeenCalled();
+  });
+});
